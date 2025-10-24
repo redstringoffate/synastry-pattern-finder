@@ -1,135 +1,252 @@
-import itertools
+import streamlit as st
 import pandas as pd
-
-# ======================
-# 🔮 유틸리티
-# ======================
-
-def is_mixed_pattern(combo, person_map):
-    """도형 내에 B가 하나라도 포함되어 있으면 인정"""
-    owners = {person_map.get(p, None) for p in combo}
-    return "B" in owners
+from detect_patterns_synastry import detect_patterns
+from pattern_keywords import PATTERN_KEYWORDS
 
 
-def aspect_exists(df, p1, p2, aspects):
-    """두 포인트 간 특정 Aspect가 존재하는지 확인"""
-    subset = df[
-        ((df["From"] == p1) & (df["To"] == p2))
-        | ((df["From"] == p2) & (df["To"] == p1))
-    ]
-    return any(subset["Aspect"].isin(aspects))
+# ♈ 별자리 매핑
+ZODIAC_SIGNS = {
+    "♈": "Aries", "♉": "Taurus", "♊": "Gemini", "♋": "Cancer",
+    "♌": "Leo", "♍": "Virgo", "♎": "Libra", "♏": "Scorpio",
+    "♐": "Sagittarius", "♑": "Capricorn", "♒": "Aquarius", "♓": "Pisces"
+}
+SIGN_KEYS = list(ZODIAC_SIGNS.values())
+
+# 🌙 Aspect별 orb (분 단위)
+ORB_RANGES = {
+    "Conjunction": 480, "Opposition": 480,
+    "Trine1": 360, "Trine2": 360,
+    "Square1": 360, "Square2": 360,
+    "Quintile1": 120, "Quintile2": 120,
+    "Bi-quintile1": 120, "Bi-quintile2": 120,
+    "Sextile1": 240, "Sextile2": 240,
+    "Septile1": 60, "Septile2": 60,
+    "Bi-septile1": 60, "Bi-septile2": 60,
+    "Tri-septile1": 60, "Tri-septile2": 60,
+    "Octile1": 180, "Octile2": 180,
+    "Sesquiquadrate1": 180, "Sesquiquadrate2": 180,
+    "Novile1": 60, "Novile2": 60,
+    "Bi-novile1": 60, "Bi-novile2": 60,
+    "Decile1": 90, "Decile2": 90,
+    "Tri-decile1": 90, "Tri-decile2": 90,
+    "Undecile1": 30, "Undecile2": 30,
+    "Bi-undecile1": 30, "Bi-undecile2": 30,
+    "Tri-undecile1": 30, "Tri-undecile2": 30,
+    "Quad-undecile1": 30, "Quad-undecile2": 30,
+    "Quin-undecile1": 30, "Quin-undecile2": 30,
+    "Semi-sextile1": 120, "Semi-sextile2": 120,
+    "Quincunx1": 180, "Quincunx2": 180,
+}
 
 
-# ======================
-# 🔷 개별 도형 감지 함수
-# ======================
-
-def detect_grand_trine(df, person_map):
-    """3개의 Trine으로 이루어진 Grand Trine"""
-    patterns = []
-    labels = list(set(df["From"]).union(df["To"]))
-    for combo in itertools.combinations(labels, 3):
-        p1, p2, p3 = combo
-        if (
-            aspect_exists(df, p1, p2, ["Trine"])
-            and aspect_exists(df, p2, p3, ["Trine"])
-            and aspect_exists(df, p1, p3, ["Trine"])
-            and is_mixed_pattern(combo, person_map)
-        ):
-            patterns.append(combo)
-    return patterns
+# ♑ 위치 파싱
+def parse_position(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        parts = value.strip().split()
+        sign_symbol = parts[0]
+        degree_part, minute_part = parts[1].split("°")
+        degree = int(degree_part)
+        minute = int(minute_part.replace("'", "").replace("′", ""))
+        sign_index = list(ZODIAC_SIGNS.keys()).index(sign_symbol)
+        return sign_index * 1800 + degree * 60 + minute
+    except Exception:
+        return None
 
 
-def detect_t_square(df, person_map):
-    """Opposition + 두 개의 Square"""
-    patterns = []
-    labels = list(set(df["From"]).union(df["To"]))
-    for combo in itertools.combinations(labels, 3):
-        p1, p2, p3 = combo
-        has_oppo = aspect_exists(df, p1, p2, ["Opposition"])
-        has_square_1 = aspect_exists(df, p1, p3, ["Square"])
-        has_square_2 = aspect_exists(df, p2, p3, ["Square"])
-        if has_oppo and has_square_1 and has_square_2 and is_mixed_pattern(combo, person_map):
-            patterns.append(combo)
-    return patterns
+# 📘 Aspects 시트 로드
+@st.cache_data
+def load_aspects():
+    df = pd.read_excel("Aspects.xlsx", sheet_name="Aspects")
+    for col in df.columns[3:]:
+        df[col] = df[col].apply(parse_position)
+    return df
 
 
-def detect_yod(df, person_map):
-    """두 개의 Quincunx + Sextile"""
-    patterns = []
-    labels = list(set(df["From"]).union(df["To"]))
-    for combo in itertools.combinations(labels, 3):
-        p1, p2, p3 = combo
-        q1 = aspect_exists(df, p1, p2, ["Quincunx"])
-        q2 = aspect_exists(df, p1, p3, ["Quincunx"])
-        s1 = aspect_exists(df, p2, p3, ["Sextile"])
-        if q1 and q2 and s1 and is_mixed_pattern(combo, person_map):
-            patterns.append(combo)
-    return patterns
+df_aspects = load_aspects()
 
 
-def detect_grand_cross(df, person_map):
-    """4개의 Square + 2개의 Opposition (Grand Cross)"""
-    patterns = []
-    labels = list(set(df["From"]).union(df["To"]))
-    for combo in itertools.combinations(labels, 4):
-        pairs = list(itertools.combinations(combo, 2))
-        oppositions = [p for p in pairs if aspect_exists(df, p[0], p[1], ["Opposition"])]
-        squares = [p for p in pairs if aspect_exists(df, p[0], p[1], ["Square"])]
-        if len(oppositions) >= 2 and len(squares) >= 4 and is_mixed_pattern(combo, person_map):
-            patterns.append(combo)
-    return patterns
+# 🌞 별자리 → 분 단위
+def to_row_index(sign, degree, minute):
+    sign_index = SIGN_KEYS.index(sign)
+    return sign_index * 1800 + degree * 60 + minute
 
 
-def detect_kite(df, person_map):
-    """Grand Trine + Opposition (Kite)"""
-    trines = detect_grand_trine(df, person_map)
-    patterns = []
-    for tri in trines:
-        extra_points = list(set(df["From"]).union(df["To"]) - set(tri))
-        for p in extra_points:
-            if any(aspect_exists(df, p, t, ["Opposition"]) for t in tri):
-                full_combo = tuple(sorted(list(tri) + [p]))
-                if is_mixed_pattern(full_combo, person_map):
-                    patterns.append(full_combo)
-    return patterns
+# ------------------------- UI -------------------------
 
+st.title("💫 Synastry Aspect & Pattern Analyzer")
+st.caption("두 사람의 행성 간 Aspect 및 도형(패턴)을 탐지합니다.")
 
-def detect_mystic_rectangle(df, person_map):
-    """2 Oppositions + 2 Sextiles + 2 Trines"""
-    patterns = []
-    labels = list(set(df["From"]).union(df["To"]))
-    for combo in itertools.combinations(labels, 4):
-        pairs = list(itertools.combinations(combo, 2))
-        oppositions = [p for p in pairs if aspect_exists(df, p[0], p[1], ["Opposition"])]
-        trines = [p for p in pairs if aspect_exists(df, p[0], p[1], ["Trine"])]
-        sextiles = [p for p in pairs if aspect_exists(df, p[0], p[1], ["Sextile"])]
-        if len(oppositions) >= 2 and len(trines) >= 2 and len(sextiles) >= 2 and is_mixed_pattern(combo, person_map):
-            patterns.append(combo)
-    return patterns
+# 기준축 선택 스위치
+axis_choice = st.toggle("B를 기준축으로 설정", value=False)
+axis_label = "B" if axis_choice else "A"
 
+# 세션 초기화
+for key in ["A_points", "B_points"]:
+    if key not in st.session_state:
+        st.session_state[key] = []
 
-# ======================
-# 🧭 메인 감지기
-# ======================
+colA, colB = st.columns(2)
 
-def detect_patterns(df):
-    """Synastry용 Aspect Pattern 탐지"""
-    labels = list(set(df["From"]).union(df["To"]))
+# --- A 입력 ---
+with colA:
+    st.subheader("🩷 Person A")
+    with st.form("A_form", clear_on_submit=True):
+        label = st.text_input("Label (예: Sun)", key="A_label")
+        sign = st.selectbox("Sign", SIGN_KEYS, key="A_sign")
+        degree = st.number_input("Degree", 0, 29, 0, key="A_deg")
+        minute = st.number_input("Minute", 0, 59, 0, key="A_min")
+        if st.form_submit_button("➕ 등록"):
+            if label:
+                idx = to_row_index(sign, degree, minute)
+                st.session_state.A_points.append((f"A_{label}", idx))
+                st.success(f"{label} — {sign} {degree}°{minute}′ 등록 완료")
 
-    # 🪞 A_/B_ prefix 기반 person mapping
-    person_map = {}
-    for p in labels:
-        if p.startswith("A_"):
-            person_map[p] = "A"
-        elif p.startswith("B_"):
-            person_map[p] = "B"
+    st.markdown("**📋 등록된 포인트:**")
+    for i, (label, row) in enumerate(st.session_state.A_points):
+        s = SIGN_KEYS[row // 1800]
+        d = (row % 1800) // 60
+        m = row % 60
+        cols = st.columns([4, 1])
+        cols[0].write(f"• **{label}** — {s} {d}°{m}′")
+        if cols[1].button("🗑️", key=f"delA_{i}"):
+            st.session_state.A_points.pop(i)
+            st.rerun()
 
-    return {
-        "Grand Trine": detect_grand_trine(df, person_map),
-        "T-Square": detect_t_square(df, person_map),
-        "Yod": detect_yod(df, person_map),
-        "Grand Cross": detect_grand_cross(df, person_map),
-        "Kite": detect_kite(df, person_map),
-        "Mystic Rectangle": detect_mystic_rectangle(df, person_map),
-    }
+# --- B 입력 ---
+with colB:
+    st.subheader("💙 Person B")
+    with st.form("B_form", clear_on_submit=True):
+        label = st.text_input("Label (예: Moon)", key="B_label")
+        sign = st.selectbox("Sign", SIGN_KEYS, key="B_sign")
+        degree = st.number_input("Degree", 0, 29, 0, key="B_deg")
+        minute = st.number_input("Minute", 0, 59, 0, key="B_min")
+        if st.form_submit_button("➕ 등록"):
+            if label:
+                idx = to_row_index(sign, degree, minute)
+                st.session_state.B_points.append((f"B_{label}", idx))
+                st.success(f"{label} — {sign} {degree}°{minute}′ 등록 완료")
+
+    st.markdown("**📋 등록된 포인트:**")
+    for i, (label, row) in enumerate(st.session_state.B_points):
+        s = SIGN_KEYS[row // 1800]
+        d = (row % 1800) // 60
+        m = row % 60
+        cols = st.columns([4, 1])
+        cols[0].write(f"• **{label}** — {s} {d}°{m}′")
+        if cols[1].button("🗑️", key=f"delB_{i}"):
+            st.session_state.B_points.pop(i)
+            st.rerun()
+
+st.divider()
+
+# -------------------- Aspect + Pattern --------------------
+
+if st.button("🔍 Calculate Synastry Aspects & Patterns"):
+    results = []
+
+    # 기준축에 따라 A/B 스왑
+    if axis_choice:
+        primary_points = st.session_state.B_points
+        secondary_points = st.session_state.A_points
+    else:
+        primary_points = st.session_state.A_points
+        secondary_points = st.session_state.B_points
+
+    for labelA, rowA in primary_points:
+        for labelB, rowB in secondary_points:
+
+            diff = abs(rowA - rowB)
+            diff = min(diff, 21600 - diff)
+
+            # Conjunction 별도 처리
+            if diff <= ORB_RANGES["Conjunction"]:
+                orb_val = diff / 60
+                results.append({
+                    "Axis": axis_label,
+                    "Primary": labelA,
+                    "Secondary": labelB,
+                    "Aspect": "Conjunction",
+                    "Orb": f"{orb_val:.2f}°"
+                })
+                continue
+
+            # 나머지 lookup 기반
+            for aspect, orb in ORB_RANGES.items():
+                if aspect not in df_aspects.columns:
+                    continue
+
+                target_row = df_aspects.iloc[rowA, df_aspects.columns.get_loc(aspect)]
+                if pd.isna(target_row):
+                    continue
+
+                delta = abs(rowB - target_row)
+                delta = min(delta, 21600 - delta)
+
+                if delta <= orb:
+                    orb_val = delta / 60
+                    clean_aspect = ''.join([c for c in aspect if not c.isdigit()])
+                    if any(r for r in results if {r["Primary"], r["Secondary"]} == {labelA, labelB} and r["Aspect"] == clean_aspect):
+                        continue
+                    results.append({
+                        "Axis": axis_label,
+                        "Primary": labelA,
+                        "Secondary": labelB,
+                        "Aspect": clean_aspect,
+                        "Orb": f"{orb_val:.2f}°"
+                    })
+
+    if not results:
+        st.warning("⚠️ 성립하는 aspect가 없습니다.")
+        st.stop()
+
+    # ✅ Aspect 결과 표시
+    st.success("✅ Aspect & Pattern analysis complete!")
+    df_results = pd.DataFrame(results)
+    st.dataframe(df_results, use_container_width=True)
+    csv = df_results.to_csv(index=False, encoding="utf-8-sig")
+    st.download_button("📥 Download CSV", csv, file_name="synastry_aspects.csv")
+
+    # 🔮 패턴 분석 (공유 모듈 사용)
+    df_results = df_results.rename(columns={"Primary": "From", "Secondary": "To"})
+    patterns = detect_patterns(df_results)
+
+    major_results = {}
+    minor_results = {}
+
+    for name, combos in patterns.items():
+        if not combos:
+            continue
+        meta = PATTERN_KEYWORDS.get(name, {})
+        category = meta.get("category", "Minor")
+        keyword = meta.get("keyword", "")
+
+        if category == "Major":
+            major_results[name] = (keyword, combos)
+        else:
+            minor_results[name] = (keyword, combos)
+
+    st.divider()
+
+    # 🌟 Major Patterns
+    st.subheader("🌟 Major Patterns")
+    if not major_results:
+        st.info("No major synastry patterns detected.")
+    else:
+        for name, (kw, combos) in major_results.items():
+            st.markdown(f"**{name}** — {kw}")
+            for c in combos:
+                st.write(" • ", " – ".join(c))
+            st.markdown("---")
+
+    # ✴️ Minor Patterns
+    st.subheader("✴️ Minor Patterns")
+    if not minor_results:
+        st.info("No minor synastry patterns detected.")
+    else:
+        for name, (kw, combos) in minor_results.items():
+            st.markdown(f"**{name}** — {kw}")
+            for c in combos:
+                st.write(" • ", " – ".join(c))
+            st.markdown("---")

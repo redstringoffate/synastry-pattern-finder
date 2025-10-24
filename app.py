@@ -205,8 +205,9 @@ if st.button("🔍 Calculate Synastry Aspects & Patterns"):
     st.download_button("📥 Download CSV", csv, file_name="synastry_aspects.csv")
 
     # 🔮 패턴 분석 (공유 모듈 사용)
-    from detect_patterns import detect_patterns
+    from detect_patterns_synastry import detect_patterns
     from pattern_keywords import PATTERN_KEYWORDS
+
 
     df_results = df_results.rename(columns={"Primary": "From", "Secondary": "To"})
     patterns = detect_patterns(df_results)
@@ -249,5 +250,6 @@ if st.button("🔍 Calculate Synastry Aspects & Patterns"):
             for c in combos:
                 st.write(" • ", " – ".join(c))
             st.markdown("---")
+
 
 

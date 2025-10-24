@@ -1,154 +1,135 @@
-# detect_patterns_synastry.py
+import itertools
 import pandas as pd
 
-# --------------------------------------------
-# 공통 필터: 도형에 A와 B가 모두 포함되어야 함
-# --------------------------------------------
+# ======================
+# 🔮 유틸리티
+# ======================
+
 def is_mixed_pattern(combo, person_map):
-    """도형 구성원에 A와 B 모두 포함돼 있는지 확인"""
+    """도형 내에 B가 하나라도 포함되어 있으면 인정"""
     owners = {person_map.get(p, None) for p in combo}
-    return len(owners.intersection({"A", "B"})) == 2
+    return "B" in owners
 
 
-# --------------------------------------------
-# Grand Trine
-# --------------------------------------------
+def aspect_exists(df, p1, p2, aspects):
+    """두 포인트 간 특정 Aspect가 존재하는지 확인"""
+    subset = df[
+        ((df["From"] == p1) & (df["To"] == p2))
+        | ((df["From"] == p2) & (df["To"] == p1))
+    ]
+    return any(subset["Aspect"].isin(aspects))
+
+
+# ======================
+# 🔷 개별 도형 감지 함수
+# ======================
+
 def detect_grand_trine(df, person_map):
-    trines = df[df["Aspect"] == "Trine"]
-    combos = []
-    labels = sorted(set(df["From"]).union(df["To"]))
-    for i in range(len(labels)):
-        for j in range(i+1, len(labels)):
-            for k in range(j+1, len(labels)):
-                a, b, c = labels[i], labels[j], labels[k]
-                if (
-                    any((df["From"] == a) & (df["To"] == b) & (df["Aspect"] == "Trine")) and
-                    any((df["From"] == b) & (df["To"] == c) & (df["Aspect"] == "Trine")) and
-                    any((df["From"] == a) & (df["To"] == c) & (df["Aspect"] == "Trine"))
-                ):
-                    if is_mixed_pattern((a, b, c), person_map):
-                        combos.append((a, b, c))
-    return combos
+    """3개의 Trine으로 이루어진 Grand Trine"""
+    patterns = []
+    labels = list(set(df["From"]).union(df["To"]))
+    for combo in itertools.combinations(labels, 3):
+        p1, p2, p3 = combo
+        if (
+            aspect_exists(df, p1, p2, ["Trine"])
+            and aspect_exists(df, p2, p3, ["Trine"])
+            and aspect_exists(df, p1, p3, ["Trine"])
+            and is_mixed_pattern(combo, person_map)
+        ):
+            patterns.append(combo)
+    return patterns
 
 
-# --------------------------------------------
-# T-Square
-# --------------------------------------------
-def detect_tsquare(df, person_map):
-    combos = []
-    oppositions = df[df["Aspect"] == "Opposition"]
-    squares = df[df["Aspect"] == "Square"]
-    labels = sorted(set(df["From"]).union(df["To"]))
-    for i in range(len(labels)):
-        for j in range(i+1, len(labels)):
-            for k in range(len(labels)):
-                if i == k or j == k:
-                    continue
-                a, b, c = labels[i], labels[j], labels[k]
-                if (
-                    any((df["From"] == a) & (df["To"] == b) & (df["Aspect"] == "Opposition")) and
-                    any((df["From"] == a) & (df["To"] == c) & (df["Aspect"] == "Square")) and
-                    any((df["From"] == b) & (df["To"] == c) & (df["Aspect"] == "Square"))
-                ):
-                    if is_mixed_pattern((a, b, c), person_map):
-                        combos.append((a, b, c))
-    return combos
+def detect_t_square(df, person_map):
+    """Opposition + 두 개의 Square"""
+    patterns = []
+    labels = list(set(df["From"]).union(df["To"]))
+    for combo in itertools.combinations(labels, 3):
+        p1, p2, p3 = combo
+        has_oppo = aspect_exists(df, p1, p2, ["Opposition"])
+        has_square_1 = aspect_exists(df, p1, p3, ["Square"])
+        has_square_2 = aspect_exists(df, p2, p3, ["Square"])
+        if has_oppo and has_square_1 and has_square_2 and is_mixed_pattern(combo, person_map):
+            patterns.append(combo)
+    return patterns
 
 
-# --------------------------------------------
-# Yod
-# --------------------------------------------
 def detect_yod(df, person_map):
-    sextiles = df[df["Aspect"] == "Sextile"]
-    quincunxes = df[df["Aspect"] == "Quincunx"]
-    combos = []
-    labels = sorted(set(df["From"]).union(df["To"]))
-    for i in range(len(labels)):
-        for j in range(i+1, len(labels)):
-            for k in range(j+1, len(labels)):
-                a, b, c = labels[i], labels[j], labels[k]
-                if (
-                    any((df["From"] == a) & (df["To"] == b) & (df["Aspect"] == "Sextile")) and
-                    any((df["From"] == a) & (df["To"] == c) & (df["Aspect"] == "Quincunx")) and
-                    any((df["From"] == b) & (df["To"] == c) & (df["Aspect"] == "Quincunx"))
-                ):
-                    if is_mixed_pattern((a, b, c), person_map):
-                        combos.append((a, b, c))
-    return combos
+    """두 개의 Quincunx + Sextile"""
+    patterns = []
+    labels = list(set(df["From"]).union(df["To"]))
+    for combo in itertools.combinations(labels, 3):
+        p1, p2, p3 = combo
+        q1 = aspect_exists(df, p1, p2, ["Quincunx"])
+        q2 = aspect_exists(df, p1, p3, ["Quincunx"])
+        s1 = aspect_exists(df, p2, p3, ["Sextile"])
+        if q1 and q2 and s1 and is_mixed_pattern(combo, person_map):
+            patterns.append(combo)
+    return patterns
 
 
-# --------------------------------------------
-# Kite
-# --------------------------------------------
+def detect_grand_cross(df, person_map):
+    """4개의 Square + 2개의 Opposition (Grand Cross)"""
+    patterns = []
+    labels = list(set(df["From"]).union(df["To"]))
+    for combo in itertools.combinations(labels, 4):
+        pairs = list(itertools.combinations(combo, 2))
+        oppositions = [p for p in pairs if aspect_exists(df, p[0], p[1], ["Opposition"])]
+        squares = [p for p in pairs if aspect_exists(df, p[0], p[1], ["Square"])]
+        if len(oppositions) >= 2 and len(squares) >= 4 and is_mixed_pattern(combo, person_map):
+            patterns.append(combo)
+    return patterns
+
+
 def detect_kite(df, person_map):
-    combos = []
-    trines = df[df["Aspect"] == "Trine"]
-    sextiles = df[df["Aspect"] == "Sextile"]
-    oppositions = df[df["Aspect"] == "Opposition"]
-    labels = sorted(set(df["From"]).union(df["To"]))
-    for i in range(len(labels)):
-        for j in range(i+1, len(labels)):
-            for k in range(j+1, len(labels)):
-                for l in range(k+1, len(labels)):
-                    a, b, c, d = labels[i], labels[j], labels[k], labels[l]
-                    if (
-                        any((df["From"] == a) & (df["To"] == b) & (df["Aspect"] == "Trine")) and
-                        any((df["From"] == b) & (df["To"] == c) & (df["Aspect"] == "Trine")) and
-                        any((df["From"] == a) & (df["To"] == c) & (df["Aspect"] == "Trine")) and
-                        any((df["From"] == a) & (df["To"] == d) & (df["Aspect"] == "Opposition")) and
-                        (
-                            any((df["From"] == d) & (df["To"] == b) & (df["Aspect"] == "Sextile")) or
-                            any((df["From"] == d) & (df["To"] == c) & (df["Aspect"] == "Sextile"))
-                        )
-                    ):
-                        if is_mixed_pattern((a, b, c, d), person_map):
-                            combos.append((a, b, c, d))
-    return combos
+    """Grand Trine + Opposition (Kite)"""
+    trines = detect_grand_trine(df, person_map)
+    patterns = []
+    for tri in trines:
+        extra_points = list(set(df["From"]).union(df["To"]) - set(tri))
+        for p in extra_points:
+            if any(aspect_exists(df, p, t, ["Opposition"]) for t in tri):
+                full_combo = tuple(sorted(list(tri) + [p]))
+                if is_mixed_pattern(full_combo, person_map):
+                    patterns.append(full_combo)
+    return patterns
 
 
-# --------------------------------------------
-# Mystic Rectangle
-# --------------------------------------------
 def detect_mystic_rectangle(df, person_map):
-    combos = []
-    oppositions = df[df["Aspect"] == "Opposition"]
-    sextiles = df[df["Aspect"] == "Sextile"]
-    trines = df[df["Aspect"] == "Trine"]
-    labels = sorted(set(df["From"]).union(df["To"]))
-    for i in range(len(labels)):
-        for j in range(i+1, len(labels)):
-            for k in range(j+1, len(labels)):
-                for l in range(k+1, len(labels)):
-                    a, b, c, d = labels[i], labels[j], labels[k], labels[l]
-                    if (
-                        any((df["From"] == a) & (df["To"] == c) & (df["Aspect"] == "Opposition")) and
-                        any((df["From"] == b) & (df["To"] == d) & (df["Aspect"] == "Opposition")) and
-                        any((df["From"] == a) & (df["To"] == b) & (df["Aspect"] == "Sextile")) and
-                        any((df["From"] == c) & (df["To"] == d) & (df["Aspect"] == "Sextile"))
-                    ):
-                        if is_mixed_pattern((a, b, c, d), person_map):
-                            combos.append((a, b, c, d))
-    return combos
+    """2 Oppositions + 2 Sextiles + 2 Trines"""
+    patterns = []
+    labels = list(set(df["From"]).union(df["To"]))
+    for combo in itertools.combinations(labels, 4):
+        pairs = list(itertools.combinations(combo, 2))
+        oppositions = [p for p in pairs if aspect_exists(df, p[0], p[1], ["Opposition"])]
+        trines = [p for p in pairs if aspect_exists(df, p[0], p[1], ["Trine"])]
+        sextiles = [p for p in pairs if aspect_exists(df, p[0], p[1], ["Sextile"])]
+        if len(oppositions) >= 2 and len(trines) >= 2 and len(sextiles) >= 2 and is_mixed_pattern(combo, person_map):
+            patterns.append(combo)
+    return patterns
 
 
-# --------------------------------------------
-# 메인 탐지 함수
-# --------------------------------------------
+# ======================
+# 🧭 메인 감지기
+# ======================
+
 def detect_patterns(df):
-    # 🩶 A/B 매핑 자동 추출
-    person_map = {}
-    for i, row in df.iterrows():
-        for col in ["From", "To"]:
-            if "A" in row[col]:
-                person_map[row[col]] = "A"
-            elif "B" in row[col]:
-                person_map[row[col]] = "B"
+    """Synastry용 Aspect Pattern 탐지"""
+    labels = list(set(df["From"]).union(df["To"]))
 
-    patterns = {
+    # 🪞 A_/B_ prefix 기반 person mapping
+    person_map = {}
+    for p in labels:
+        if p.startswith("A_"):
+            person_map[p] = "A"
+        elif p.startswith("B_"):
+            person_map[p] = "B"
+
+    return {
         "Grand Trine": detect_grand_trine(df, person_map),
-        "T-Square": detect_tsquare(df, person_map),
+        "T-Square": detect_t_square(df, person_map),
         "Yod": detect_yod(df, person_map),
+        "Grand Cross": detect_grand_cross(df, person_map),
         "Kite": detect_kite(df, person_map),
         "Mystic Rectangle": detect_mystic_rectangle(df, person_map),
     }
-    return patterns

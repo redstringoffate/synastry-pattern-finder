@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+from detect_patterns_synastry import detect_patterns
+
 
 # ♈ 별자리 매핑
 ZODIAC_SIGNS = {
@@ -247,4 +249,5 @@ if st.button("🔍 Calculate Synastry Aspects & Patterns"):
             for c in combos:
                 st.write(" • ", " – ".join(c))
             st.markdown("---")
+
 

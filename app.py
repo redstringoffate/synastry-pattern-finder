@@ -206,6 +206,7 @@ if st.button("🔍 Calculate Synastry Aspects & Patterns"):
     from detect_patterns import detect_patterns
     from pattern_keywords import PATTERN_KEYWORDS
 
+    df_results = df_results.rename(columns={"Primary": "From", "Secondary": "To"})
     patterns = detect_patterns(df_results)
 
     major_results = {}
@@ -246,3 +247,4 @@ if st.button("🔍 Calculate Synastry Aspects & Patterns"):
             for c in combos:
                 st.write(" • ", " – ".join(c))
             st.markdown("---")
+

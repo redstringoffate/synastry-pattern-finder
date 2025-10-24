@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from detect_patterns_synastry import detect_patterns
+from pattern_keywords import PATTERN_KEYWORDS
 
 
 # ♈ 별자리 매핑
@@ -37,6 +38,7 @@ ORB_RANGES = {
     "Quincunx1": 180, "Quincunx2": 180,
 }
 
+
 # ♑ 위치 파싱
 def parse_position(value):
     if not isinstance(value, str):
@@ -52,6 +54,7 @@ def parse_position(value):
     except Exception:
         return None
 
+
 # 📘 Aspects 시트 로드
 @st.cache_data
 def load_aspects():
@@ -60,7 +63,9 @@ def load_aspects():
         df[col] = df[col].apply(parse_position)
     return df
 
+
 df_aspects = load_aspects()
+
 
 # 🌞 별자리 → 분 단위
 def to_row_index(sign, degree, minute):
@@ -71,7 +76,7 @@ def to_row_index(sign, degree, minute):
 # ------------------------- UI -------------------------
 
 st.title("💫 Synastry Aspect & Pattern Analyzer")
-st.caption("두 사람의 행성 간 aspect와 도형을 탐지합니다.")
+st.caption("두 사람의 행성 간 Aspect 및 도형(패턴)을 탐지합니다.")
 
 # 기준축 선택 스위치
 axis_choice = st.toggle("B를 기준축으로 설정", value=False)
@@ -95,7 +100,7 @@ with colA:
         if st.form_submit_button("➕ 등록"):
             if label:
                 idx = to_row_index(sign, degree, minute)
-                st.session_state.A_points.append((label, idx))
+                st.session_state.A_points.append((f"A_{label}", idx))
                 st.success(f"{label} — {sign} {degree}°{minute}′ 등록 완료")
 
     st.markdown("**📋 등록된 포인트:**")
@@ -120,7 +125,7 @@ with colB:
         if st.form_submit_button("➕ 등록"):
             if label:
                 idx = to_row_index(sign, degree, minute)
-                st.session_state.B_points.append((label, idx))
+                st.session_state.B_points.append((f"B_{label}", idx))
                 st.success(f"{label} — {sign} {degree}°{minute}′ 등록 완료")
 
     st.markdown("**📋 등록된 포인트:**")
@@ -135,7 +140,6 @@ with colB:
             st.rerun()
 
 st.divider()
-
 
 # -------------------- Aspect + Pattern --------------------
 
@@ -205,10 +209,6 @@ if st.button("🔍 Calculate Synastry Aspects & Patterns"):
     st.download_button("📥 Download CSV", csv, file_name="synastry_aspects.csv")
 
     # 🔮 패턴 분석 (공유 모듈 사용)
-    from detect_patterns_synastry import detect_patterns
-    from pattern_keywords import PATTERN_KEYWORDS
-
-
     df_results = df_results.rename(columns={"Primary": "From", "Secondary": "To"})
     patterns = detect_patterns(df_results)
 
@@ -250,6 +250,3 @@ if st.button("🔍 Calculate Synastry Aspects & Patterns"):
             for c in combos:
                 st.write(" • ", " – ".join(c))
             st.markdown("---")
-
-
-

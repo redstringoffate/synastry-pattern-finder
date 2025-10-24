@@ -124,22 +124,6 @@ def detect_mystic_rectangle(df):
     return results
 
 
-def detect_double_trine(df):
-    """한 포인트가 두 개의 Trine을 맺는 단순 패턴"""
-    results = []
-    labels = list(set(df["From"]).union(df["To"]))
-    for combo in itertools.combinations(labels, 3):
-        if not valid_combo(combo):
-            continue
-        p1, p2, p3 = combo
-        if (
-            aspect_exists(df, p1, p2, ["Trine"])
-            and aspect_exists(df, p1, p3, ["Trine"])
-        ):
-            results.append(combo)
-    return results
-
-
 def detect_golden_yod(df):
     """Quintile 기반의 Yod 변형"""
     results = []
@@ -188,7 +172,7 @@ def detect_patterns(df):
         "Thor’s Hammer": detect_thors_hammer(df),
         "T-Square": detect_tsquare(df),
         "Mystic Rectangle": detect_mystic_rectangle(df),
-        "Double Trine": detect_double_trine(df),
         "Golden Yod": detect_golden_yod(df),
         "Finger of Fate": detect_finger_of_fate(df),
     }
+
